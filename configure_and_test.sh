@@ -3,4 +3,4 @@
 perl Makefile.PL
 make
 make test
-make distclean
+make distclean >/dev/null 2>&1

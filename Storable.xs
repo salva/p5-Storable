@@ -1582,13 +1582,13 @@ static void store_hash(pTHX_ store_cxt_t *store_cxt, HV *hv)
 		TRACEME(("using canonical order"));
 
 		for (i = 0; i < len; i++) {
+			SV *key;
                         HE *he;
 #ifdef HAS_RESTRICTED_HASHES
 			he = hv_iternext_flags(hv, restricted ? HV_ITERNEXT_WANTPLACEHOLDERS : 0);
 #else
 			he = hv_iternext(hv);
 #endif
-			SV *key;
 
 			if (!he)
 				CROAK(("Hash %p inconsistent - expected %d keys, %dth is NULL", hv, (int)len, (int)i));
@@ -2176,7 +2176,7 @@ static int store_hook(pTHX_ store_cxt_t *store_cxt, SV *sv, int type, HV *pkg, S
 			CROAK(("Too late to ignore hooks for %s class \"%s\"",
                                (store_cxt->cloning ? "cloning" : "storing"), classname));
 
-                hv_store(aTHX_ store_cxt->hook, classname, classlen, newSV(0), 0);
+                hv_store(store_cxt->hook, classname, classlen, newSV(0), 0);
 
 		TRACEME(("ignoring STORABLE_freeze in class \"%s\"", classname));
 
