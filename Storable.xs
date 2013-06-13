@@ -352,8 +352,8 @@ struct st_retrieve_cxt {
 #endif
 
 static void
-croak_io_error(pTHX_ SSize_t rc, retrieve_cxt_t *retrieve_cxt, char *str) {
-        char *error;
+croak_io_error(pTHX_ SSize_t rc, retrieve_cxt_t *retrieve_cxt, const char *str) {
+        const char *error;
         if (rc < 0) {
                 SV *ioe = GvSV(gv_fetchpvs("!", GV_ADDMULTI, SVt_PV));
                 error = SvPV_nolen(ioe);
@@ -367,7 +367,7 @@ croak_io_error(pTHX_ SSize_t rc, retrieve_cxt_t *retrieve_cxt, char *str) {
                            (retrieve_cxt->input_fh ? "file" : "string"),
                            error);
         else
-                Perl_croak(aTHX_ "%s: %s", str, error);
+                Perl_croak(aTHX_ "%s: %s", (char *)str, (char*)error);
 }
 
 #define READ_ERROR(bytes)                                          \
@@ -1109,7 +1109,7 @@ downgrade_restricted(pTHX) {
  */
 static int known_class(pTHX_ store_cxt_t *store_cxt, HV *pkg, I32 *classnum) {
 
-        char *tag1;
+        void *tag1;
 
 	TRACEME(("known_class (%s)", HvNAME_get(pkg)));
 
@@ -1169,7 +1169,7 @@ static void store_ref(pTHX_ store_cxt_t *store_cxt, SV *sv)
 	} else
 		WRITE_MARK(is_weak ? SX_WEAKREF : SX_REF);
 
-	return store(aTHX_ store_cxt, sv);
+	store(aTHX_ store_cxt, sv);
 }
 
 /*
@@ -1395,7 +1395,6 @@ static void store_array(pTHX_ store_cxt_t *store_cxt, AV *av)
 	SV **sav;
 	I32 len = av_len(av) + 1;
 	I32 i;
-	int ret;
 
 	TRACEME(("store_array (0x%"UVxf")", PTR2UV(av)));
 
@@ -1772,7 +1771,7 @@ static void store_code(pTHX_ store_cxt_t *store_cxt, CV *cv)
     /*
 	 * retrieve_code does not work with perl 5.005 or less
 	 */
-	return store_other(aTHX_ retrieve_cxt, (SV*)cv);
+	store_other(aTHX_ retrieve_cxt, (SV*)cv);
 #else
 	dSP;
 	I32 len;
@@ -1786,7 +1785,8 @@ static void store_code(pTHX_ store_cxt_t *store_cxt, CV *cv)
 		(store_cxt->deparse < 0 && !(store_cxt->deparse =
 			SvTRUE(perl_get_sv("Storable::Deparse", GV_ADD)) ? 1 : 0))
 	) {
-		return store_other(aTHX_ store_cxt, (SV*)cv);
+		store_other(aTHX_ store_cxt, (SV*)cv);
+		return;
 	}
 
 	/*
@@ -2037,7 +2037,6 @@ static int store_hook(pTHX_ store_cxt_t *store_cxt, SV *sv, int type, HV *pkg, S
         I32 ax;
 	char *classname;
 	STRLEN frozenlen;
-	SV *ref;
 	int count, i;
 	unsigned char flags;
 	char *frozenpv;
@@ -2166,7 +2165,7 @@ static int store_hook(pTHX_ store_cxt_t *store_cxt, SV *sv, int type, HV *pkg, S
                  * references. We use magic as a marker on the hook SV
                  * that the class does not use STORABLE_attach at all */
 
-                if (!SvMAGICAL(sv) || !mg_find(hook, PERL_MAGIC_ext)) {
+                if (!SvMAGICAL(hook) || !mg_find(hook, PERL_MAGIC_ext)) {
                         GV* gv = gv_fetchmethod_autoload(pkg, "STORABLE_attach", FALSE);
                         if (gv && isGV(gv))
                                 CROAK(("Freeze cannot return references if %s class is using STORABLE_attach", classname));
@@ -2460,7 +2459,7 @@ static void store_blessed(
 	 * Now emit the <object> part.
 	 */
 
-	return SV_STORE(type)(aTHX_ store_cxt, sv);
+	SV_STORE(type)(aTHX_ store_cxt, sv);
 }
 
 /*
@@ -2588,7 +2587,6 @@ static int sv_type(pTHX_ SV *sv)
 static void store(pTHX_ store_cxt_t *store_cxt, SV *sv)
 {
 	void *tag1;
-	int ret;
 	int type;
 	PTR_TBL_t *pseen = store_cxt->pseen;
 
@@ -2739,7 +2737,7 @@ static void magic_write(pTHX_ store_cxt_t *store_cxt)
         length -= sizeof (magicstr) - 1;
     }        
 
-    WRITE_BYTES((unsigned char*) header, length);
+    WRITE_BYTES((const char*) header, length);
 
     if (!store_cxt->netorder) {
 	TRACEME(("ok (magic_write byteorder = 0x%lx [%d], I%d L%d P%d D%d)",
@@ -2862,7 +2860,6 @@ static SV *retrieve_idx_blessed(pTHX_ retrieve_cxt_t *retrieve_cxt, const char *
 	I32 idx;
 	const char *classname;
 	SV **sva;
-	SV *sv;
 
 	PERL_UNUSED_ARG(cname);
 	TRACEME(("retrieve_idx_blessed (#%d)", retrieve_cxt->tagnum));
@@ -3097,7 +3094,7 @@ static SV *retrieve_hook(pTHX_ retrieve_cxt_t *retrieve_cxt, const char *cname)
                                 load_module(PERL_LOADMOD_NOIMPORT, newSVsv(class_sv), Nullsv);
                         }
                         for (is_thaw = 0; is_thaw < 2; is_thaw++) {
-                                char *method = (is_thaw ? "STORABLE_thaw" : "STORABLE_attach");
+                                const char *method = (is_thaw ? "STORABLE_thaw" : "STORABLE_attach");
                                 GV *gv = gv_fetchmethod_autoload(gv_stashsv(class_sv, GV_ADD),
                                                                  method, FALSE);
                                 if (gv && isGV(gv)) {
@@ -3625,7 +3622,6 @@ static SV *retrieve_lutf8str(pTHX_ retrieve_cxt_t *retrieve_cxt, const char *cna
 static SV *retrieve_vstring_any(pTHX_ retrieve_cxt_t *retrieve_cxt, const char *cname, int l) {
 #ifdef SvVOK
 	SV *sv, *s;
-        MAGIC *mg;
         I32 len;
         READ_VARINT(l, len);
         READ_SVPV(s, len);
@@ -3659,7 +3655,7 @@ static SV *retrieve_vstring_any(pTHX_ retrieve_cxt_t *retrieve_cxt, const char *
  * SX_VSTRING <length> <data> with SX_VSTRING already read.
  */
 static SV *retrieve_vstring(pTHX_ retrieve_cxt_t *retrieve_cxt, const char *cname) {
-        retrieve_vstring_any(aTHX_ retrieve_cxt, cname, 0);
+        return retrieve_vstring_any(aTHX_ retrieve_cxt, cname, 0);
 }
 
 /*
@@ -3668,7 +3664,7 @@ static SV *retrieve_vstring(pTHX_ retrieve_cxt_t *retrieve_cxt, const char *cnam
  * Like retrieve_vstring, but for longer vstrings.
  */
 static SV *retrieve_lvstring(pTHX_ retrieve_cxt_t *retrieve_cxt, const char *cname) {
-        retrieve_vstring_any(aTHX_ retrieve_cxt, cname, 1);
+        return retrieve_vstring_any(aTHX_ retrieve_cxt, cname, 1);
 }
 
 /*
@@ -4739,7 +4735,7 @@ static SV *do_retrieve(pTHX_ PerlIO *f, SV *in) {
 				CROAK(("Frozen string corrupt - contains characters outside 0-255"));
 #endif
 		}
-		retrieve_cxt.input = SvPV(in, size);
+		retrieve_cxt.input = (const unsigned char *)SvPV(in, size);
                 retrieve_cxt.input_end = retrieve_cxt.input + size;
 	}
 
@@ -4870,7 +4866,7 @@ static SV *dclone(pTHX_ SV *in)
        	retrieve_cxt.is_tainted = SvTAINTED(in);
 	retrieve_cxt.retrieve_vtbl = sv_retrieve;
 	retrieve_cxt.netorder = 0;
-        retrieve_cxt.input = SvPV(store_cxt.output_sv, size);
+        retrieve_cxt.input = (const unsigned char *)SvPV(store_cxt.output_sv, size);
         retrieve_cxt.input_end = retrieve_cxt.input + size;
 
         sv_setpvs(state, "retrieving");
